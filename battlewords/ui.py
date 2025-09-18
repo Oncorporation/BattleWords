@@ -32,7 +32,6 @@ def _init_session() -> None:
 def _new_game() -> None:
     st.session_state.clear()
     _init_session()
-    st.rerun()
 
 
 def _to_state() -> GameState:
@@ -63,13 +62,13 @@ def _render_header():
     st.markdown(
         "- Grid is 12×12 with 6 words (two 4-letter, two 5-letter, two 6-letter).\n"
         "- After each reveal, you may submit one guess.\n"
-        "- Scoring: length + unrevealed letters of that word at guess time."
-    )
+        "- Scoring: length + unrevealed letters of that word at guess time.")
+
 
 def _render_sidebar():
     with st.sidebar:
         st.header("Controls")
-        st.button("New Game", use_container_width=True, on_click=_new_game)
+        st.button("New Game", width="stretch", on_click=_new_game)
         st.markdown("Radar pulses show the last letter position of each hidden word.")
 
 
@@ -84,13 +83,37 @@ def _render_radar(puzzle: Puzzle, size: int):
     ax.set_yticks(range(1, size + 1))
     ax.grid(True, which="both", linestyle="--", alpha=0.3)
     ax.set_title("Radar")
-    st.pyplot(fig, use_container_width=True)
+    st.pyplot(fig, width="stretch")
     plt.close(fig)
 
 
 def _render_grid(state: GameState, letter_map):
     size = state.grid_size
     clicked: Optional[Coord] = None
+
+    # Inject CSS for grid lines and button styling
+    st.markdown(
+        """
+        <style>
+        div[data-testid="column"] {
+            padding: 0 !important;
+        }
+        button[data-testid="stButton"] {
+            width: 32px !important;
+            height: 32px !important;
+            min-width: 32px !important;
+            min-height: 32px !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border: 1px solid #888 !important;
+            background: #fff !important;
+            font-weight: bold;
+            font-size: 1rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
     grid_container = st.container()
     with grid_container:
@@ -101,20 +124,20 @@ def _render_grid(state: GameState, letter_map):
                 revealed = coord in state.revealed
                 label = letter_map.get(coord, " ") if revealed else " "
                 key = f"cell_{r}_{c}"
-                # Make revealed cells look disabled via help text; but still keep them clickable for UX feedback
                 if cols[c].button(label, key=key, help=f"({r+1},{c+1})"):
-                    clicked = coord
+                    if not revealed:
+                        clicked = coord
 
     if clicked is not None:
         reveal_cell(state, letter_map, clicked)
+        st.session_state.letter_map = build_letter_map(st.session_state.puzzle)
         _sync_back(state)
-        # No need to st.rerun(); Streamlit will rerun after button click
 
 
 def _render_guess_form(state: GameState):
     with st.form("guess_form"):
         guess_text = st.text_input("Your guess", value="", max_chars=12)
-        submitted = st.form_submit_button("OK", disabled=not state.can_guess, use_container_width=True)
+        submitted = st.form_submit_button("OK", disabled=not state.can_guess, width="stretch")
         if submitted:
             correct, _ = guess_word(state, guess_text)
             _sync_back(state)

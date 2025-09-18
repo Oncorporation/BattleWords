@@ -28,7 +28,7 @@ class Word:
         if self.direction not in ("H", "V"):
             raise ValueError("direction must be 'H' or 'V'")
         if not self.text.isalpha():
-            raise ValueError("word must be alphabetic A–Z only")
+            raise ValueError("word must be alphabetic Aâ€“Z only")
         # compute cells based on start and direction
         length = len(self.text)
         cells: List[Coord] = []

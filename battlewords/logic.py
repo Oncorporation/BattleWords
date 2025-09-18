@@ -19,8 +19,8 @@ def reveal_cell(state: GameState, letter_map: Dict[Coord, str], coord: Coord) ->
         return
     state.revealed.add(coord)
     state.can_guess = True
-    ch = letter_map.get(coord, "·")
-    if ch == "·":
+    ch = letter_map.get(coord, "Â·")
+    if ch == "Â·":
         state.last_action = f"Revealed empty at ({coord.x+1},{coord.y+1})."
     else:
         state.last_action = f"Revealed '{ch}' at ({coord.x+1},{coord.y+1})."
@@ -32,7 +32,7 @@ def guess_word(state: GameState, guess_text: str) -> Tuple[bool, int]:
         return False, 0
     guess = (guess_text or "").strip().upper()
     if not (len(guess) in (4, 5, 6) and guess.isalpha()):
-        state.last_action = "Guess must be A–Z and length 4, 5, or 6."
+        state.last_action = "Guess must be Aâ€“Z and length 4, 5, or 6."
         state.can_guess = False
         return False, 0
     if guess in state.guessed:
