@@ -1,11 +1,12 @@
 ﻿# Battlewords: Implementation Requirements
 
-This document breaks down the tasks to build Battlewords using the game rules described in `specs.md`. It is organized in phases: a minimal Proof of Concept (POC) and a Full Version with all features and polish.
+This document breaks down the tasks to build Battlewords using the game rules described in `specs.md`. It is organized in phases: a minimal Proof of Concept (POC), a Beta Version (0.5.0), and a Full Version (1.0.0).
 
 Assumptions
-- Tech stack: Python 3.10+, Streamlit for UI, standard library only for POC.
+- Tech stack: Python 3.10+, Streamlit for UI, matplotlib for radar, numpy for tick helpers.
 - Single-player, local state stored in Streamlit session state for POC.
-- Grid is always 12x12 with exactly six words: two 4-letter, two 5-letter, two 6-letter words; horizontal/vertical only; no shared letters or overlaps.
+- Grid is always 12x12 with exactly six words: two 4-letter, two 5-letter, two 6-letter words; horizontal/vertical only; no shared letters or overlaps in POC; shared-letter overlaps allowed in Beta; no overlaps in Full.
+- Entry point is `app.py`.
 
 Streamlit key components (API usage plan)
 - State & caching
@@ -22,22 +23,24 @@ Streamlit key components (API usage plan)
   - `st.metric` to show score; `st.checkbox`/`st.toggle` for optional settings (e.g., show radar).
 - Visualization
   - `st.pyplot` for the radar mini-grid (scatter on a 12×12 axes) or `st.plotly_chart` if interactive.
+  - Radar plot uses `ax.set_ylim(size, 0)` to invert Y so (0,0) is top-left.
 - Control flow
-  - App reruns on interaction; optionally use `st.rerun()` after state resets; `st.stop()` after game over summary to freeze UI.
+  - App reruns on interaction; uses `st.rerun()` after state changes (reveal, guess); `st.stop()` after game over summary to freeze UI.
 
 Folder Structure
 - `app.py` – Streamlit entry point
 - `battlewords/` – Python package
   - `__init__.py`
   - `models.py` – data models and types
-  - `generator.py` – word placement and puzzle generation
-  - `logic.py` – game mechanics (reveal, guess, scoring)
-  - `ui.py` – Streamlit UI composition
+  - `word_loader.py` – load/validate/cached word lists (uses `battlewords/words/wordlist.txt` with fallback)
+  - `generator.py` – word placement; imports from `word_loader`; avoids duplicate words
+  - `logic.py` – game mechanics (reveal, guess, scoring, tiers)
+  - `ui.py` – Streamlit UI composition; immediate rerender on reveal/guess via `st.rerun()`; inverted radar Y
   - `words/wordlist.txt` – candidate words
-- `specs/` – documentation (existing)
-- `tests/` – unit tests
+- `specs/` – documentation (this file and `specs.md`)
+- `tests/` – unit tests (optional for now)
 
-Phase 1: Proof of Concept Version
+Phase 1: Proof of Concept (0.1.0)
 Goal: A playable, single-session game demonstrating core rules, scoring, and radar without persistence or advanced UX.
 
 1) Data Models
@@ -52,32 +55,32 @@ Acceptance: Types exist and are consumed by generator/logic; simple constructors
 - Add an English word list filtered to alphabetic uppercase, lengths in {4,5,6}.
 - Ensure words contain no special characters; maintain reasonable difficulty.
 - Streamlit: `st.cache_data` to memoize loading/filtering.
+- Loader is centralized in `word_loader.py` and used by generator and UI.
 
 Acceptance: Loading function returns lists by length with >= 500 words per length or fallback minimal lists.
 
 3) Puzzle Generation (Placement)
 - Randomly place 2×4, 2×5, 2×6 letter words on a 12×12 grid.
-- Constraints:
+- Constraints (POC):
   - Horizontal (left→right) or Vertical (top→down) only.
-  - No overlapping letters.
-  - No shared letters between different words (cells must be unique; letters adjacent orthogonally are allowed).
+  - No overlapping letters between different words (cells must be unique).
 - Compute radar pulses as the last cell of each word.
 - Retry strategy with max attempts; raise a controlled error if generation fails.
 
-Acceptance: Generator returns a valid `Puzzle` passing validation checks (no collisions, in-bounds, correct counts).
+Acceptance: Generator returns a valid `Puzzle` passing validation checks (no collisions, in-bounds, correct counts, no duplicates).
 
 4) Game Mechanics
 - Reveal:
-  - Click a covered cell to reveal; if the cell is part of a word, show the letter; else mark empty.
+  - Click a covered cell to reveal; if the cell is part of a word, show the letter; else mark empty (CSS class `empty`).
   - After a reveal action, set `can_guess=True`.
-  - Streamlit: 12×12 `st.columns` + `st.button(label, key=f"cell_{r}_{c}")` per cell; on click, update `st.session_state` and optionally `st.rerun()`.
+  - Streamlit: 12×12 `st.columns` + `st.button(label, key=f"cell_{r}_{c}")` per cell; on click, update `st.session_state` and call `st.rerun()`.
 - Guess:
   - Accept a guess only if `can_guess` is True and input length ∈ {4,5,6}.
   - Match guess case-insensitively against unguessed words in puzzle.
   - If correct: add base points = word length; bonus points = count of unrevealed cells in that word at guess time; mark all cells of the word as revealed; add to `guessed`.
   - If incorrect: no points awarded.
   - After any guess, set `can_guess=False` and require another reveal before next guess.
-  - Streamlit: `with st.form("guess"):` + `st.text_input("Your guess", key="guess_text")` + `st.form_submit_button("OK", disabled=not st.session_state.can_guess)`.
+  - Streamlit: `with st.form("guess"):` + `st.text_input("Your guess", key="guess_text")` + `st.form_submit_button("OK", disabled=not st.session_state.can_guess)`; after guess, call `st.rerun()`.
 - End of game when all 6 words are guessed; display summary and tier, then `st.stop()`.
 
 Acceptance: Unit tests cover scoring, guess gating, and reveal behavior.
@@ -89,11 +92,11 @@ Acceptance: Unit tests cover scoring, guess gating, and reveal behavior.
   - Right: Radar mini-grid via `st.pyplot` (matplotlib scatter) or `st.plotly_chart`.
   - Bottom/right: Guess form using `st.form`, `st.text_input`, `st.form_submit_button`.
   - Score panel showing current score using `st.metric` and `st.markdown` for last action.
-  - Optional `st.sidebar` to host reset/new game and settings.
+  - Optional `st.sidebar` to host reset/new game and settings; shows word list source/counts.
 - Visuals:
-  - Covered cell vs revealed styles: use button labels/emojis and background color hints; if needed, small custom `st.html`/CSS for color.
+  - Covered cell vs revealed styles: use button labels/emojis and background color hints; revealed empty cells use CSS class `empty` for background.
 
-Acceptance: Users can play end-to-end in one session; UI updates consistently; radar shows exactly 6 pulses.
+Acceptance: Users can play end-to-end in one session; UI updates consistently; radar shows exactly 6 pulses; single-click reveal and guess update via rerun.
 
 6) Scoring Tiers
 - After game ends, compute tier:
@@ -107,13 +110,37 @@ Acceptance: Tier text shown at game end; manual test with mocked states.
 
 7) Basic Tests
 - Unit tests for:
-  - Placement validity (bounds, overlap, counts).
+  - Placement validity (bounds, overlap, counts, no duplicate words).
   - Scoring logic and bonus calculation.
   - Guess gating (must reveal before next guess).
 
 Acceptance: Tests run and pass locally.
 
-Phase 2: Full Version (All Features and Polish)
+Beta Version (0.5.0)
+Goal: Introduce overlapping words on shared letters, improve UX responsiveness and input options, and add deterministic seeding.
+
+A) Generator and Validation
+- Allow shared-letter overlaps: words may cross on the same letter; still disallow conflicting letters on the same cell.
+- Optional validation pass to detect and avoid unintended adjacent partial words (content curation rule).
+- Deterministic seed support to reproduce puzzles (e.g., daily seed derived from date).
+Acceptance:
+- Placement permits shared-letter crossings only when letters match.
+- With a fixed seed/date, the same puzzle is produced.
+
+B) UI and Interaction
+- Cell rendering with consistent sizing and responsive layout (desktop/mobile).
+- Keyboard support for grid navigation and guessing (custom JS via `st.html` or component).
+- Maintain radar behavior and scoring rules.
+Acceptance:
+- Grid scales cleanly across typical desktop and mobile widths.
+- Users can enter guesses and move focus via keyboard.
+
+C) Tests
+- Property checks for overlap validity (only same letters may share a cell).
+- Seed reproducibility tests (same seed → identical placements).
+- Optional validation tests for adjacency curation (when enabled).
+
+Phase 2: Full Version (1.0.0)
 Goal: Robust app with polish, persistence, test coverage, and optional advanced features.
 
 A) UX and Visual Polish
@@ -185,9 +212,7 @@ J) Deployment
 
 Milestones and Estimates (High-level)
 - Phase 1 (POC): 2–4 days
-  - Models + generator + logic: 1–2 days
-  - UI + scoring + radar: 1 day
-  - Tests and polish: 0.5–1 day
+- Beta (0.5.0): 3–5 days (overlaps, responsive UI, keyboard, deterministic seed)
 - Phase 2 (Full): 1–2 weeks depending on features selected
 
 Definitions of Done (per task)
