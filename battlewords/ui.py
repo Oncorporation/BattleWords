@@ -1,13 +1,73 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Iterable, Tuple, Optional
 
-import matplotlib.pyplot as plt
+import numpy as np
 import streamlit as st
+import matplotlib.pyplot as plt
 
 from .generator import generate_puzzle, load_word_list
 from .logic import build_letter_map, reveal_cell, guess_word, is_game_over, compute_tier
 from .models import Coord, GameState, Puzzle
+
+
+CoordLike = Tuple[int, int]
+
+
+def _coord_to_xy(c) -> CoordLike:
+    # Supports dataclass Coord(x, y) or a 2-tuple/list.
+    if hasattr(c, "x") and hasattr(c, "y"):
+        return int(c.x), int(c.y)
+    if isinstance(c, (tuple, list)) and len(c) == 2:
+        return int(c[0]), int(c[1])
+    raise TypeError(f"Unsupported Coord type: {type(c)!r}")
+
+
+def _normalize_revealed(revealed: Iterable) -> set[CoordLike]:
+    return {(_coord_to_xy(c) if not (isinstance(c, tuple) and len(c) == 2 and isinstance(c[0], int)) else c) for c in revealed}
+
+
+def _build_letter_map(puzzle) -> dict[CoordLike, str]:
+    letters: dict[CoordLike, str] = {}
+    for w in getattr(puzzle, "words", []):
+        text = getattr(w, "text", "")
+        cells = getattr(w, "cells", [])
+        for i, c in enumerate(cells):
+            xy = _coord_to_xy(c)
+            if 0 <= i < len(text):
+                letters[xy] = text[i]
+    return letters
+
+
+def inject_styles() -> None:
+    st.markdown(
+        """
+        <style>
+          .bw-row { display: flex; gap: 4px; }
+          .bw-cell {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #3a3a3a;
+            border-radius: 4px;
+            font-weight: 700;
+            user-select: none;
+          }
+          .bw-cell.letter { background: #1e1e1e; color: #eaeaea; }
+          .bw-cell.empty  { background: #0f0f0f; } /* requested "empty" class */
+          /* Make grid buttons fill their column cleanly */
+          div[data-testid="stButton"] button {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            border-radius: 4px;
+            border: 1px solid #3a3a3a;
+          }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _init_session() -> None:
@@ -78,7 +138,7 @@ def _render_radar(puzzle: Puzzle, size: int):
     ys = [c.x + 1 for c in puzzle.radar]  # rows on y-axis
     ax.scatter(xs, ys, c="red", s=60, marker="o")
     ax.set_xlim(0.5, size + 0.5)
-    ax.set_ylim(0.5, size + 0.5)
+    ax.set_ylim(size, 0)
     ax.set_xticks(range(1, size + 1))
     ax.set_yticks(range(1, size + 1))
     ax.grid(True, which="both", linestyle="--", alpha=0.3)
@@ -132,6 +192,7 @@ def _render_grid(state: GameState, letter_map):
         reveal_cell(state, letter_map, clicked)
         st.session_state.letter_map = build_letter_map(st.session_state.puzzle)
         _sync_back(state)
+        st.rerun()
 
 
 def _render_guess_form(state: GameState):
@@ -141,6 +202,7 @@ def _render_guess_form(state: GameState):
         if submitted:
             correct, _ = guess_word(state, guess_text)
             _sync_back(state)
+            st.rerun()  # Immediately rerun to reflect guess result in UI
 
 
 def _render_score_panel(state: GameState):

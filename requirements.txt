@@ -1,2 +1,5 @@
 streamlit
-# Entry point is now app.py, not main.py
+matplotlib
+pytest
+flake8
+mypy
