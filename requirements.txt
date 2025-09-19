@@ -1,5 +1,6 @@
 streamlit
 matplotlib
+numpy
 pytest
 flake8
 mypy

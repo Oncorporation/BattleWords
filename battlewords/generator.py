@@ -1,45 +1,10 @@
 from __future__ import annotations
 
 import random
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
-import streamlit as st
-
+from .word_loader import load_word_list
 from .models import Coord, Word, Puzzle
-
-
-# Fallback minimal word pools if file missing or too small
-_FALLBACK: Dict[int, List[str]] = {
-    4: ["TREE", "BOAT", "WIND", "FROG", "LION", "MOON", "FORK", "GLOW", "GAME", "CODE"],
-    5: ["APPLE", "RIVER", "STONE", "PLANT", "MOUSE", "BOARD", "CHAIR", "SCALE", "SMILE", "CLOUD"],
-    6: ["ORANGE", "PYTHON", "STREAM", "MARKET", "FOREST", "THRIVE", "LOGGER", "BREATH", "DOMAIN", "GALAXY"],
-}
-
-
-@st.cache_data(show_spinner=False)
-def load_word_list() -> Dict[int, List[str]]:
-    """
-    Loads and filters a word list for lengths 4, 5, 6.
-    Returns a dict length->words (uppercase, A–Z only).
-    """
-    base = Path(__file__).parent / "words" / "wordlist.txt"
-    words_by_len: Dict[int, List[str]] = {4: [], 5: [], 6: []}
-    if base.exists():
-        try:
-            for line in base.read_text(encoding="utf-8").splitlines():
-                w = line.strip().upper()
-                if w.isalpha() and len(w) in (4, 5, 6):
-                    words_by_len[len(w)].append(w)
-        except Exception:
-            pass
-
-    # Ensure minimum pools; otherwise fallback
-    for L in (4, 5, 6):
-        if len(words_by_len[L]) < 500:
-            words_by_len[L] = _FALLBACK[L].copy()
-
-    return words_by_len
 
 
 def _fits_and_free(cells: List[Coord], used: set[Coord], size: int) -> bool:
@@ -65,18 +30,24 @@ def generate_puzzle(
     """
     Place exactly six words: 2x4, 2x5, 2x6, horizontal or vertical,
     no cell overlaps. Radar pulses are last-letter cells.
+    Ensures the same word text is not selected more than once.
     """
     rng = random.Random(seed)
     words_by_len = words_by_len or load_word_list()
     target_lengths = [4, 4, 5, 5, 6, 6]
 
     used: set[Coord] = set()
+    used_texts: set[str] = set()
     placed: List[Word] = []
 
-    # Pre-shuffle the word pools for variety but deterministic with seed
-    pools: Dict[int, List[str]] = {L: words_by_len[L][:] for L in (4, 5, 6)}
-    for L in pools:
-        rng.shuffle(pools[L])
+    # Pre-shuffle the word pools for variety but deterministic with seed.
+    # Also de-duplicate within each length pool while preserving order.
+    pools: Dict[int, List[str]] = {}
+    for L in (4, 5, 6):
+        # Preserve order and dedupe
+        unique_words = list(dict.fromkeys(words_by_len.get(L, [])))
+        rng.shuffle(unique_words)
+        pools[L] = unique_words
 
     attempts = 0
     for L in target_lengths:
@@ -94,6 +65,10 @@ def generate_puzzle(
                 break
             attempts += 1
 
+            # Skip words already used to avoid duplicates across placements
+            if cand_text in used_texts:
+                continue
+
             # Try a variety of starts/orientations for this word
             for _ in range(50):
                 direction = rng.choice(["H", "V"])
@@ -109,6 +84,12 @@ def generate_puzzle(
                     w = Word(cand_text, Coord(row, col), direction)
                     placed.append(w)
                     used.update(cells)
+                    used_texts.add(cand_text)
+                    # Remove from pool so it can't be picked again later
+                    try:
+                        pool.remove(cand_text)
+                    except ValueError:
+                        pass
                     placed_ok = True
                     break
 
