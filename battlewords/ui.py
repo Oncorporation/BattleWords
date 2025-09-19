@@ -43,7 +43,7 @@ def inject_styles() -> None:
     st.markdown(
         """
         <style>
-          .bw-row { display: flex; gap: 4px; }
+          .bw-row { display: flex; gap: 4px; flex-wrap: nowrap; }
           .bw-cell {
             width: 100%;
             aspect-ratio: 1 / 1;
@@ -56,13 +56,36 @@ def inject_styles() -> None:
             user-select: none;
           }
           .bw-cell.letter { background: #1e1e1e; color: #eaeaea; }
-          .bw-cell.empty  { background: #0f0f0f; } /* requested "empty" class */
-          /* Make grid buttons fill their column cleanly */
+          .bw-cell.empty  { background: #0f0f0f; }
           div[data-testid="stButton"] button {
             width: 100%;
             aspect-ratio: 1 / 1;
             border-radius: 4px;
             border: 1px solid #3a3a3a;
+          }
+          /* Mobile styles */
+          @media (max-width: 640px) {
+            /* stColumns: force 100% width and column-reverse for radar */
+            div[data-testid="stHorizontalBlock"] {
+              # flex-direction: column-reverse !important;
+              width: 100% !important;
+              max-width: 100vw !important;
+            }
+            div[data-testid="column"] {
+              width: 100% !important;
+              min-width: 100% !important;
+              max-width: 100vw !important;
+              flex: 1 1 100% !important;
+            }
+            div[data-testid="stLayoutWrapper"] .stHorizontalBlock div[data-testid="stColumn"]:first-child {
+                min-width: calc(8.33333% - 1rem) !important;
+            }
+            /* Prevent grid from wrapping */
+            .bw-row {
+              flex-wrap: nowrap !important;
+              width: 100vw !important;
+              overflow-x: auto;
+            }
           }
         </style>
         """,
@@ -123,6 +146,7 @@ def _render_header():
         "- Grid is 12×12 with 6 words (two 4-letter, two 5-letter, two 6-letter).\n"
         "- After each reveal, you may submit one guess.\n"
         "- Scoring: length + unrevealed letters of that word at guess time.")
+    inject_styles()
 
 
 def _render_sidebar():
