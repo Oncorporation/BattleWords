@@ -20,6 +20,7 @@ Battlewords is inspired by the classic Battleship game, but uses words instead o
 - After revealing a letter, players may guess a word by entering it in a text box.
 - Guess submission triggers an immediate rerun to reflect results.
 - Only one guess per letter reveal; must uncover another letter before guessing again.
+- **The game ends when all six words are guessed or all word letters are revealed.**
 
 ## Scoring
 - Each correct word guess awards points:
@@ -29,6 +30,7 @@ Battlewords is inspired by the classic Battleship game, but uses words instead o
   - Good: 34-37
   - Great: 38-41
   - Fantastic: 42+
+- **Game over is triggered by either all words being guessed or all word letters being revealed.**
 
 ## POC (0.1.0) Rules
 - No overlaps: words do not overlap or share letters.

@@ -33,6 +33,7 @@ BattleWords is a vocabulary learning game inspired by classic Battleship mechani
 - Overlapping words on shared letters (Beta)
 - Daily and practice modes (Full)
 - Leaderboards, persistence, and advanced features (Full)
+- **Game ends when all words are guessed or all word letters are revealed**
 
 ## Installation
 1. Clone the repository:
@@ -82,7 +83,7 @@ streamlit run app.py
 1. Click grid squares to reveal letters or empty spaces.
 2. After revealing a letter, enter a guess for a word in the text box.
 3. Earn points for correct guesses and bonus points for unrevealed letters.
-4. The game ends when all six words are found. Your score tier is displayed.
+4. **The game ends when all six words are found or all word letters are revealed. Your score tier is displayed.**
 
 ## Development Phases
 

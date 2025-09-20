@@ -81,7 +81,7 @@ Acceptance: Generator returns a valid `Puzzle` passing validation checks (no col
   - If incorrect: no points awarded.
   - After any guess, set `can_guess=False` and require another reveal before next guess.
   - Streamlit: `with st.form("guess"):` + `st.text_input("Your guess", key="guess_text")` + `st.form_submit_button("OK", disabled=not st.session_state.can_guess)`; after guess, call `st.rerun()`.
-- End of game when all 6 words are guessed; display summary and tier, then `st.stop()`.
+- **End of game when all 6 words are guessed or all word letters are revealed; display summary and tier, then `st.stop()`.**
 
 Acceptance: Unit tests cover scoring, guess gating, and reveal behavior.
 
