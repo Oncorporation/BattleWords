@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from . import __version__ as version
 from typing import Iterable, Tuple, Optional
 
 import numpy as np
@@ -43,6 +43,7 @@ def inject_styles() -> None:
     st.markdown(
         """
         <style>
+          /* Base grid cell visuals */
           .bw-row { display: flex; gap: 4px; flex-wrap: nowrap; }
           .bw-cell {
             width: 100%;
@@ -54,37 +55,61 @@ def inject_styles() -> None:
             border-radius: 4px;
             font-weight: 700;
             user-select: none;
+            padding: 0.25rem 0.75rem;
+            min-height: 2.5rem;
+            transition: background 0.2s ease;
           }
           .bw-cell.letter { background: #1e1e1e; color: #eaeaea; }
           .bw-cell.empty  { background: #0f0f0f; }
+          .bw-cell.bw-cell-complete { background: #b7f7b7 !important; color: #1a1a1a !important; }
+
+          /* Final score style */
+          .bw-final-score { color: #1ca41c !important; font-weight: 800; }
+
+          /* Make grid buttons square and fill their column */
           div[data-testid="stButton"] button {
             width: 100%;
             aspect-ratio: 1 / 1;
             border-radius: 4px;
             border: 1px solid #3a3a3a;
           }
+
+          /* Ensure grid cell columns expand equally for both buttons and revealed cells */
+          div[data-testid="column"], .st-emotion-cache-zh2fnc {
+            width: auto !important;
+            flex: 1 1 auto !important;
+            min-width: 0 !important;
+            max-width: 100% !important;
+          }
+
+          /* Ensure grid rows generated via st.columns do not wrap and can scroll horizontally. */
+          .bw-grid-row-anchor + div[data-testid="stHorizontalBlock"] {
+            flex-wrap: nowrap !important;
+            overflow-x: auto !important;
+          }
+          .bw-grid-row-anchor + div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+            flex: 0 0 auto !important;
+          }
+
           /* Mobile styles */
           @media (max-width: 640px) {
-            /* stColumns: force 100% width and column-reverse for radar */
-            div[data-testid="stHorizontalBlock"] {
-              # flex-direction: column-reverse !important;
+            /* Reverse the main two-column layout (radar above grid) and force full width */
+            #bw-main-anchor + div[data-testid="stHorizontalBlock"] {
+              flex-direction: column-reverse !important;
               width: 100% !important;
               max-width: 100vw !important;
             }
-            div[data-testid="column"] {
+            #bw-main-anchor + div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
               width: 100% !important;
               min-width: 100% !important;
-              max-width: 100vw !important;
+              max-width: 100% !important;
               flex: 1 1 100% !important;
             }
-            div[data-testid="stLayoutWrapper"] .stHorizontalBlock div[data-testid="stColumn"]:first-child {
-                min-width: calc(8.33333% - 1rem) !important;
-            }
-            /* Prevent grid from wrapping */
-            .bw-row {
+
+            /* Keep grid rows on one line on small screens too */
+            .bw-grid-row-anchor + div[data-testid="stHorizontalBlock"] {
               flex-wrap: nowrap !important;
-              width: 100vw !important;
-              overflow-x: auto;
+              overflow-x: auto !important;
             }
           }
         </style>
@@ -140,12 +165,14 @@ def _sync_back(state: GameState) -> None:
 
 
 def _render_header():
-    st.title("Battlewords (POC)")
+    st.title(f"Battlewords (Proof Of Concept) v {version}")
     st.subheader("Reveal cells, then guess the hidden words.")
     st.markdown(
         "- Grid is 12×12 with 6 words (two 4-letter, two 5-letter, two 6-letter).\n"
-        "- After each reveal, you may submit one guess.\n"
-        "- Scoring: length + unrevealed letters of that word at guess time.")
+        "- After each reveal, you may submit one word guess below.\n"
+        "- Scoring: length + unrevealed letters of that word at guess time.\n"
+        "- Score Board: radar of last letter of word, score and status.\n"
+        "- Words do not overlap, but may be touching.")
     inject_styles()
 
 
@@ -153,15 +180,30 @@ def _render_sidebar():
     with st.sidebar:
         st.header("Controls")
         st.button("New Game", width="stretch", on_click=_new_game)
-        st.markdown("Radar pulses show the last letter position of each hidden word.")
+        st.markdown(  
+            "- Radar pulses show the last letter position of each hidden word.\n"
+            "- After each reveal, you may submit one word guess below.\n"
+            "- Scoring: length + unrevealed letters of that word at guess time.")
 
 
 def _render_radar(puzzle: Puzzle, size: int):
+    st.markdown(
+        """
+        <style>
+        h3 {
+            margin: 0.25rem auto;
+            text-align: center;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.subheader("Score Board")
     fig, ax = plt.subplots(figsize=(4, 4))
     xs = [c.y + 1 for c in puzzle.radar]  # columns on x-axis
     ys = [c.x + 1 for c in puzzle.radar]  # rows on y-axis
     ax.scatter(xs, ys, c="red", s=60, marker="o")
-    ax.set_xlim(0.5, size + 0.5)
+    ax.set_xlim(0.5, size)
     ax.set_ylim(size, 0)
     ax.set_xticks(range(1, size + 1))
     ax.set_yticks(range(1, size + 1))
@@ -202,14 +244,43 @@ def _render_grid(state: GameState, letter_map):
     grid_container = st.container()
     with grid_container:
         for r in range(size):
+            # Anchor to style the following st.columns row container
+            st.markdown('<div class="bw-grid-row-anchor"></div>', unsafe_allow_html=True)
             cols = st.columns(size, gap="small")
             for c in range(size):
                 coord = Coord(r, c)
                 revealed = coord in state.revealed
+                # Get label if revealed
                 label = letter_map.get(coord, " ") if revealed else " "
+
+                # If this coord belongs to a completed (guessed) word
+                is_completed_cell = False
+                if revealed:
+                    for w in state.puzzle.words:
+                        if w.text in state.guessed and coord in w.cells:
+                            is_completed_cell = True
+                            break
+
                 key = f"cell_{r}_{c}"
-                if cols[c].button(label, key=key, help=f"({r+1},{c+1})"):
-                    if not revealed:
+                tooltip = f"({r+1},{c+1})"
+
+                if is_completed_cell:
+                    # Render a styled non-button cell with green background and native browser tooltip
+                    safe_label = (label or " ")
+                    cols[c].markdown(
+                        f'<div class="bw-cell bw-cell-complete" title="{tooltip}">{safe_label}</div>',
+                        unsafe_allow_html=True,
+                    )
+                elif revealed:
+                    # Render a styled non-button cell showing the letter with native browser tooltip
+                    safe_label = (label or " ")
+                    cols[c].markdown(
+                        f'<div class="bw-cell letter" title="{tooltip}">{safe_label}</div>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    # Unrevealed: render a button to allow click/reveal with tooltip
+                    if cols[c].button(" ", key=key, help=tooltip):
                         clicked = coord
 
     if clicked is not None:
@@ -240,7 +311,11 @@ def _render_score_panel(state: GameState):
 def _render_game_over(state: GameState):
     st.subheader("Game Over")
     tier = compute_tier(state.score)
-    st.markdown(f"Final score: {state.score} — Tier: **{tier}**")
+    # Final score in green
+    st.markdown(
+        f"<span class=\"bw-final-score\">Final score: {state.score}</span> — Tier: <strong>{tier}</strong>",
+        unsafe_allow_html=True,
+    )
 
     with st.expander("Game summary", expanded=True):
         for w in state.puzzle.words:
@@ -258,7 +333,9 @@ def run_app():
 
     state = _to_state()
 
-    left, right = st.columns([3, 1], gap="large")
+    # Anchor to target the main two-column layout for mobile reversal
+    st.markdown('<div id="bw-main-anchor"></div>', unsafe_allow_html=True)
+    left, right = st.columns([3, 1], gap="medium")
     with left:
         _render_grid(state, st.session_state.letter_map)
     with right:

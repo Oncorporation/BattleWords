@@ -10,7 +10,7 @@ def _new_game() -> None:
 
 
 def main():
-    st.set_page_config(page_title="Battlewords (POC)", layout="wide")
+    st.set_page_config(page_title="Battlewords (Proof Of Concept)", layout="wide")
     run_app()
 
 

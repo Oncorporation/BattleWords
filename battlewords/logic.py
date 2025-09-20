@@ -69,7 +69,16 @@ def guess_word(state: GameState, guess_text: str) -> Tuple[bool, int]:
 
 
 def is_game_over(state: GameState) -> bool:
-    return len(state.guessed) == 6
+    # Game ends if all words are guessed
+    if len(state.guessed) == 6:
+        return True
+    # Game ends if all word cells are revealed
+    all_word_cells = set()
+    for w in state.puzzle.words:
+        all_word_cells.update(w.cells)
+    if all_word_cells.issubset(state.revealed):
+        return True
+    return False
 
 
 def compute_tier(score: int) -> str:
